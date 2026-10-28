@@ -325,8 +325,7 @@ pub(super) fn parse_chart_text(xml_data: &[u8]) -> Result<Option<String>> {
     let values: Vec<String> = doc
         .descendants()
         .filter(|n| n.tag_name().namespace() == Some(CHART_NAMESPACE) && n.tag_name().name() == "v")
-        .filter_map(|n| n.text())
-        .map(|s| s.trim().to_string())
+        .filter_map(|n| n.text().map(|s| chart_value_text(&n, s.trim())))
         .filter(|s| !s.is_empty())
         .collect();
 
@@ -343,6 +342,31 @@ pub(super) fn parse_chart_text(xml_data: &[u8]) -> Result<Option<String>> {
     } else {
         Ok(Some(parts.join("\n")))
     }
+}
+
+/// Text of one chart `c:v` value.
+///
+/// A value in a number cache (`c:numCache`, or `c:numLit` for literal data) is the double
+/// Office stored, written with up to 17 significant digits, so `1.1` can be stored as
+/// `1.1000000000000001`. PowerPoint shows at most 15, so the value is rounded to 15
+/// significant digits before printing the shortest form, as `format_excel_float` does for
+/// spreadsheet cells. Series names and category labels in a string cache stay as written.
+fn chart_value_text(node: &Node, text: &str) -> String {
+    let in_number_cache = node.ancestors().any(|a| {
+        a.tag_name().namespace() == Some(CHART_NAMESPACE) && matches!(a.tag_name().name(), "numCache" | "numLit")
+    });
+    if in_number_cache
+        && let Ok(value) = text.parse::<f64>()
+        && value.is_finite()
+    {
+        let rounded = format!("{value:.14e}")
+            .parse::<f64>()
+            .ok()
+            .filter(|rounded| rounded.is_finite())
+            .unwrap_or(value);
+        return format!("{rounded}");
+    }
+    text.to_string()
 }
 
 /// Parse the text content of a SmartArt/diagram data part (e.g.

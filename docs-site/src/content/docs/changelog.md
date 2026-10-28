@@ -71,6 +71,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **(pptx): Print chart values from the number cache with at most 15 significant digits.**
+  A value stored as `1.1000000000000001` reads `1.1`, as PowerPoint shows it. Series names and category labels
+  stay as written. (#2298)
+
 - **(docx): Keep the number Word paints on each numbered list item.**
   Labels such as `Q4.`, `(b)` and `3.2` are computed from `word/numbering.xml` as Word counts them, with start
   values, level and start overrides, level restarts, lists that share a definition, and letter and roman

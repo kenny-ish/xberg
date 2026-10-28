@@ -1439,6 +1439,65 @@ fn test_issue_80_chart_and_smartart_text_extracted() {
     );
 }
 
+/// #2298: a chart's number cache holds the double Office stored, written with up to 17
+/// significant digits. Its values must print as PowerPoint shows them, with at most 15
+/// significant digits, while a category label from the string cache stays as written.
+#[test]
+fn test_issue_2298_chart_number_cache_values_use_15_significant_digits() {
+    let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+    <p:cSld><p:spTree>
+        <p:graphicFrame>
+            <p:nvGraphicFramePr><p:cNvPr id="2" name="Chart 1"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>
+            <a:graphic>
+                <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">
+                    <c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId2"/>
+                </a:graphicData>
+            </a:graphic>
+        </p:graphicFrame>
+    </p:spTree></p:cSld>
+</p:sld>"#;
+
+    let slide_rels = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+    <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/>
+</Relationships>"#;
+
+    let chart_xml: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+  <c:chart>
+    <c:plotArea><c:barChart><c:ser>
+      <c:cat><c:strRef><c:strCache><c:pt idx="0"><c:v>1.10</c:v></c:pt></c:strCache></c:strRef></c:cat>
+      <c:val><c:numRef><c:numCache>
+        <c:pt idx="0"><c:v>1.1000000000000001</c:v></c:pt>
+        <c:pt idx="1"><c:v>0.30000000000000004</c:v></c:pt>
+        <c:pt idx="2"><c:v>42</c:v></c:pt>
+      </c:numCache></c:numRef></c:val>
+    </c:ser></c:barChart></c:plotArea>
+  </c:chart>
+</c:chartSpace>"#;
+
+    let pptx = build_single_slide_pptx(slide_xml, Some(slide_rels), &[("ppt/charts/chart1.xml", chart_xml)]);
+
+    let result = extract_pptx_from_bytes(
+        &pptx,
+        &PptxExtractionOptions {
+            extract_images: false,
+            ..Default::default()
+        },
+        &mut Vec::new(),
+    )
+    .unwrap();
+
+    assert!(
+        result.content.contains("1.10, 1.1, 0.3, 42"),
+        "number cache values must print with at most 15 significant digits, got: {:?}",
+        result.content
+    );
+}
+
 /// #90: `a:fld` (cached field text, e.g. slide number) and `a:br` (explicit
 /// line break) must contribute to paragraph text instead of being skipped.
 ///
